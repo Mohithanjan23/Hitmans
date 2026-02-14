@@ -11,6 +11,7 @@ export interface PlayerState {
     angle: number;
     health: number;
     username: string;
+    skinUrl: string; // LEGO Skin URL
     kills: number;
     deaths: number;
     isDead: boolean;
@@ -69,8 +70,8 @@ export interface ClientInput {
 }
 
 export type ClientMessage =
-    | { type: 'create_lobby'; payload: { username: string } }
-    | { type: 'join_lobby'; payload: { username: string; lobbyId: string } }
+    | { type: 'create_lobby'; payload: { username: string; skinUrl?: string } }
+    | { type: 'join_lobby'; payload: { username: string; lobbyId: string; skinUrl?: string } }
     | { type: 'input'; payload: ClientInput }
     | { type: 'respawn' }
     | { type: 'select_weapon'; payload: { weapon: WeaponType } }

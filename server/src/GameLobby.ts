@@ -5,7 +5,7 @@ import { saveMatch, MatchStats } from './models/Match';
 import { pool } from './db';
 import { MAPS, MapData } from './maps';
 
-// Constants
+// Mission Parameters
 const TICK_RATE = 20;
 const TICK_MS = 1000 / TICK_RATE;
 const ARENA_WIDTH = 1600;
@@ -50,7 +50,7 @@ export class GameLobby {
     private matchStartedAt: Date;
     private playerStats: Map<string, { kills: number, deaths: number, score: number, joinTime: Date, userId?: string }> = new Map();
 
-    // Map & Voting
+    // Tactical Map & Operations Vote
     private currentMap: MapData;
     private isVoting: boolean = false;
     private playerVotes: Map<string, string> = new Map();
@@ -89,7 +89,7 @@ export class GameLobby {
         }
     }
 
-    addPlayer(ws: CustomWebSocket, username: string) {
+    addPlayer(ws: CustomWebSocket, username: string, skinUrl?: string) {
         const playerId = ws.playerId;
         this.clients.set(playerId, ws);
         this.inputs.set(playerId, {
@@ -98,7 +98,7 @@ export class GameLobby {
             angle: 0, seq: 0
         });
 
-        this.state.players[playerId] = this.createPlayerState(playerId, username);
+        this.state.players[playerId] = this.createPlayerState(playerId, username, skinUrl);
         this.playerStats.set(playerId, { kills: 0, deaths: 0, score: 0, joinTime: new Date(), userId: ws.userId });
 
         console.log(`[Lobby ${this.id}] Player ${username} (${playerId}) joined.`);
@@ -220,9 +220,27 @@ export class GameLobby {
         }
     }
 
-    private createPlayerState(id: string, username: string): PlayerState {
+    private createPlayerState(id: string, username: string, skinUrl?: string): PlayerState {
         const weapon = 'pistol';
         const spawn = this.currentMap.spawnPoints[Math.floor(Math.random() * this.currentMap.spawnPoints.length)];
+
+        // Use provided skin if valid, otherwise random fallback
+        let selectedSkin = skinUrl;
+        if (!selectedSkin) {
+            const legoSkins = [
+                "https://randomuser.me/api/portraits/lego/0.jpg",
+                "https://randomuser.me/api/portraits/lego/1.jpg",
+                "https://randomuser.me/api/portraits/lego/2.jpg",
+                "https://randomuser.me/api/portraits/lego/3.jpg",
+                "https://randomuser.me/api/portraits/lego/4.jpg",
+                "https://randomuser.me/api/portraits/lego/5.jpg",
+                "https://randomuser.me/api/portraits/lego/6.jpg",
+                "https://randomuser.me/api/portraits/lego/7.jpg",
+                "https://randomuser.me/api/portraits/lego/8.jpg",
+            ];
+            selectedSkin = legoSkins[Math.floor(Math.random() * legoSkins.length)];
+        }
+
         return {
             id,
             x: spawn.x,
@@ -238,7 +256,8 @@ export class GameLobby {
             maxAmmo: WEAPONS[weapon].maxAmmo,
             isReloading: false,
             canDash: true,
-            isSliding: false
+            isSliding: false,
+            skinUrl: selectedSkin
         };
     }
 

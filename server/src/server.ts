@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { ClientMessage, ServerMessage } from './types';
 import { LobbyManager } from './LobbyManager';
-import { connectDB } from './db';
+import { connectDB, initDatabase } from './db';
 import { createUser, findUserByUsername, validatePassword, updateUserLastSeen } from './models/User';
 import express from 'express';
 import http from 'http';
@@ -17,8 +17,11 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const lobbyManager = new LobbyManager();
 
-// Connect to Database
-connectDB().catch(err => console.error("DB Connection Failed", err));
+// Establish Secure Uplink to Database & Init Schema
+(async () => {
+    await connectDB();
+    await initDatabase();
+})();
 
 console.log(`Server started on ws://localhost:${PORT}`);
 
@@ -46,7 +49,7 @@ wss.on('connection', (ws: CustomWebSocket) => {
                         ws.username = message.payload.username;
                     }
                     const lobby = lobbyManager.createLobby();
-                    lobby.addPlayer(ws, ws.username || message.payload.username);
+                    lobby.addPlayer(ws, ws.username || message.payload.username, message.payload.skinUrl);
                     ws.lobbyId = lobby.id;
                     break;
                 }
@@ -54,7 +57,7 @@ wss.on('connection', (ws: CustomWebSocket) => {
                     if (!ws.username) ws.username = message.payload.username;
                     const lobby = lobbyManager.getLobby(message.payload.lobbyId);
                     if (lobby) {
-                        lobby.addPlayer(ws, ws.username || message.payload.username);
+                        lobby.addPlayer(ws, ws.username || message.payload.username, message.payload.skinUrl);
                         ws.lobbyId = lobby.id;
                     } else {
                         ws.send(JSON.stringify({ type: 'error', payload: { message: 'Lobby not found.' } }));
@@ -82,7 +85,7 @@ wss.on('connection', (ws: CustomWebSocket) => {
                     }
                     break;
                 }
-                // --- Auth Handlers ---
+                // --- Clearance Verification (Auth) ---
                 case 'register': {
                     try {
                         const { username, password } = message.payload;

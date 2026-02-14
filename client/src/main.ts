@@ -3,10 +3,10 @@ import {
     LobbyJoinedPayload, SnapshotPayload, PlayerDeathPayload, ClientMessage, WeaponType, Obstacle
 } from './types';
 
-// --- Configuration ---
+// --- Mission Parameters ---
 const SERVER_URL = 'ws://localhost:8080';
 
-// --- Constants ---
+// --- Field Specifications ---
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 720;
 const MAP_WIDTH = 1600;
@@ -20,7 +20,7 @@ const INTERPOLATION_DELAY = 100; // ms
 let camera = { x: 0, y: 0 };
 let obstacles: Obstacle[] = [];
 
-// --- DOM Elements ---
+// --- Interface Uplink ---
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 
@@ -32,14 +32,14 @@ const allViews = {
     gameContainer: document.getElementById('gameContainer')!,
 };
 
-// UI Elements
+// Tactical Overlay Elements
 const deathScreen = document.getElementById('death-screen')!;
 const classSelectScreen = document.getElementById('class-select-screen')!;
 const joinModalOverlay = document.getElementById('join-modal-overlay')!;
 const usernameInput = document.getElementById('username') as HTMLInputElement;
 const playButton = document.getElementById('playButton') as HTMLButtonElement;
 
-// Lobby UI
+// Deployment Hub UI
 const createLobbyBtn = document.getElementById('createLobbyBtn') as HTMLButtonElement;
 const joinLobbyBtn = document.getElementById('joinLobbyBtn') as HTMLButtonElement;
 const leaveLobbyBtn = document.getElementById('leaveLobbyBtn') as HTMLButtonElement;
@@ -49,7 +49,7 @@ const modalLobbyIdInput = document.getElementById('modalLobbyIdInput') as HTMLIn
 const lobbyIdText = document.getElementById('lobby-id-text') as HTMLElement;
 const lobbyCodeDisplay = document.getElementById('lobby-code-display') as HTMLElement;
 
-// HUD UI
+// Status Display Units (HUD)
 const respawnBtn = document.getElementById('respawnBtn') as HTMLButtonElement;
 const changeClassBtn = document.getElementById('changeClassBtn') as HTMLButtonElement;
 const killerNameText = document.getElementById('killer-name-text') as HTMLElement;
@@ -60,12 +60,12 @@ const weaponDisplay = document.getElementById('weapon-display') as HTMLElement;
 const killFeed = document.getElementById('kill-feed') as HTMLElement;
 const hitmarker = document.getElementById('hitmarker') as HTMLElement;
 
-// Characters
+// Operative Customization
 const characterContainer = document.getElementById('character-svg-container')!;
 const prevCharBtn = document.getElementById('prev-char-btn')!;
 const nextCharBtn = document.getElementById('next-char-btn')!;
 
-// Auth
+// Security Clearance (Auth)
 const authStatus = document.getElementById('auth-status')!;
 const authUsername = document.getElementById('auth-username')!;
 const authLoginBtn = document.getElementById('auth-login-btn')!;
@@ -80,7 +80,7 @@ const authSubmitBtn = document.getElementById('auth-submit-btn')!;
 const classCards = document.querySelectorAll('.class-card');
 
 
-// --- Game State ---
+// --- Combat State ---
 let ws: WebSocket;
 let myPlayerId: string | null = null;
 let isAuthenticated = false;
@@ -93,9 +93,56 @@ let mousePos = { x: 0, y: 0 };
 let inputSequence = 0;
 let animationFrameId: number;
 
-// --- Initialization ---
+// --- Asset Acquisition ---
+const skinCache: { [url: string]: HTMLImageElement } = {};
+
+function getSkinImage(url: string): HTMLImageElement {
+    if (!skinCache[url]) {
+        const img = new Image();
+        img.src = url;
+        skinCache[url] = img;
+    }
+    return skinCache[url];
+}
+
+const LEGO_SKINS = [
+    "https://randomuser.me/api/portraits/lego/0.jpg",
+    "https://randomuser.me/api/portraits/lego/1.jpg",
+    "https://randomuser.me/api/portraits/lego/2.jpg",
+    "https://randomuser.me/api/portraits/lego/3.jpg",
+    "https://randomuser.me/api/portraits/lego/4.jpg",
+    "https://randomuser.me/api/portraits/lego/5.jpg",
+    "https://randomuser.me/api/portraits/lego/6.jpg",
+    "https://randomuser.me/api/portraits/lego/7.jpg",
+    "https://randomuser.me/api/portraits/lego/8.jpg",
+];
+let selectedSkinIndex = 0;
+
+function updateCharacterPreview() {
+    characterContainer.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = LEGO_SKINS[selectedSkinIndex];
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'contain';
+    img.style.filter = 'drop-shadow(0 0 10px var(--primary-color))';
+    characterContainer.appendChild(img);
+}
+
+// --- System Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     showView('mainMenu');
+    updateCharacterPreview();
+});
+
+prevCharBtn.addEventListener('click', () => {
+    selectedSkinIndex = (selectedSkinIndex - 1 + LEGO_SKINS.length) % LEGO_SKINS.length;
+    updateCharacterPreview();
+});
+
+nextCharBtn.addEventListener('click', () => {
+    selectedSkinIndex = (selectedSkinIndex + 1) % LEGO_SKINS.length;
+    updateCharacterPreview();
 });
 
 function showView(viewToShow: keyof typeof allViews) {
@@ -103,7 +150,7 @@ function showView(viewToShow: keyof typeof allViews) {
     if (allViews[viewToShow]) allViews[viewToShow].classList.remove('hidden');
 }
 
-// --- Interaction Logic ---
+// --- Comms & Interface Logic ---
 playButton.addEventListener('click', () => {
     if (usernameInput.value.trim()) {
         showView('lobbyView');
@@ -112,14 +159,27 @@ playButton.addEventListener('click', () => {
     }
 });
 
-createLobbyBtn.addEventListener('click', () => connectAndSend({ type: 'create_lobby', payload: { username: usernameInput.value.trim() } }));
+createLobbyBtn.addEventListener('click', () => connectAndSend({
+    type: 'create_lobby',
+    payload: {
+        username: usernameInput.value.trim(),
+        skinUrl: LEGO_SKINS[selectedSkinIndex]
+    }
+}));
 joinLobbyBtn.addEventListener('click', () => joinModalOverlay.classList.remove('hidden'));
 modalCancelBtn.addEventListener('click', () => joinModalOverlay.classList.add('hidden'));
 
 modalOkayBtn.addEventListener('click', () => {
     const lobbyId = modalLobbyIdInput.value.trim().toUpperCase();
     if (lobbyId) {
-        connectAndSend({ type: 'join_lobby', payload: { username: usernameInput.value.trim(), lobbyId } });
+        connectAndSend({
+            type: 'join_lobby',
+            payload: {
+                username: usernameInput.value.trim(),
+                lobbyId,
+                skinUrl: LEGO_SKINS[selectedSkinIndex]
+            }
+        });
         joinModalOverlay.classList.add('hidden');
     }
 });
@@ -163,7 +223,7 @@ function resetLobbyView() {
     teamLists.forEach(l => l.innerHTML = '');
 }
 
-// --- Auth ---
+// --- Access Control Systems ---
 authLoginBtn.addEventListener('click', () => openAuthModal('login'));
 authRegisterBtn.addEventListener('click', () => openAuthModal('register'));
 authCancelBtn.addEventListener('click', () => authModalOverlay.classList.add('hidden'));
@@ -194,7 +254,7 @@ function openAuthModal(mode: 'login' | 'register') {
     authModalOverlay.classList.remove('hidden');
 }
 
-// --- Networking ---
+// --- Uplink Protocols ---
 function connectAndSend(initialMessage: ClientMessage) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(initialMessage));
@@ -392,11 +452,22 @@ function showHitmarker() {
 
 // --- Game Logic ---
 function startGame() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // High DPI Scaling
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+
+    ctx.scale(dpr, dpr);
+
     document.addEventListener('keydown', e => updateInput(e.key, true));
     document.addEventListener('keyup', e => updateInput(e.key, false));
-    canvas.addEventListener('mousemove', e => { mousePos.x = e.clientX; mousePos.y = e.clientY; });
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mousePos.x = e.clientX - rect.left;
+        mousePos.y = e.clientY - rect.top;
+    });
     canvas.addEventListener('mousedown', () => inputs.shoot = true);
     canvas.addEventListener('mouseup', () => inputs.shoot = false);
     animationFrameId = requestAnimationFrame(gameLoop);
@@ -583,23 +654,39 @@ function render() {
         const isMe = player.id === myPlayerId;
         const color = isMe ? 'var(--primary-color)' : 'var(--danger-color)';
 
-        // Draw Player Body
-        ctx.fillStyle = isMe ? '#00f0ff' : '#ff0055';
+        // Draw Player Body (LEGO Skin)
+        const size = PLAYER_RADIUS * 2.8; // Slightly larger for image
+        ctx.save();
+        ctx.translate(player.x - camera.x, player.y - camera.y);
+        ctx.rotate(player.angle);
+
+        // Shadow
         ctx.shadowBlur = 10;
         ctx.shadowColor = isMe ? '#00f0ff' : '#ff0055';
 
-        ctx.beginPath();
-        ctx.arc(player.x - camera.x, player.y - camera.y, PLAYER_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
+        if (player.skinUrl) {
+            const img = getSkinImage(player.skinUrl);
+            if (img && img.complete) {
+                ctx.drawImage(img, -size / 2, -size / 2, size, size);
+            } else {
+                // Fallback circle while loading
+                ctx.fillStyle = isMe ? '#00f0ff' : '#ff0055';
+                ctx.beginPath();
+                ctx.arc(0, 0, PLAYER_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else {
+            // Fallback if no skinUrl is provided
+            ctx.fillStyle = isMe ? '#00f0ff' : '#ff0055';
+            ctx.beginPath();
+            ctx.arc(0, 0, PLAYER_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore(); // Restore context (undo translate/rotate)
         ctx.shadowBlur = 0; // Reset
 
-        // Direction Indicator
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(player.x - camera.x, player.y - camera.y);
-        ctx.lineTo(player.x - camera.x + Math.cos(player.angle) * (PLAYER_RADIUS + 10), player.y - camera.y + Math.sin(player.angle) * (PLAYER_RADIUS + 10));
-        ctx.stroke();
+        // Direction Indicator (Removed, skin rotation is enough)
 
         // Overhead Name
         if (!isMe) {
